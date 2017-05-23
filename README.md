@@ -3,6 +3,6 @@
 
 Jon Woodring, LambdaConf 2017 talk
 
-[Slides]()
+[Slides](https://cdn.rawgit.com/jonwoodring/ortrta/slides/slides/slides.html)
 
 [Virtual Machine]()
