@@ -1,0 +1,137 @@
+---
+title: "heat"
+author: "Jon Woodring"
+date: "May 2, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(RSQLite)
+library(ggplot2)
+
+if (!dir.exists("./images"))
+{
+  dir.create("./images")
+}
+if (file.exists("./heat.db"))
+{
+  file.remove("./heat.db")
+}
+db <- src_sqlite("./heat.db", create=TRUE)
+dbGetQuery(db $ con, "pragma journal=memory")
+dbGetQuery(db $ con, "pragma synchronize=off")
+dbGetQuery(db $ con, "pragma threads=4")
+```
+
+```{r}
+x <- 202
+y <- 202
+
+is <- copy_to(db, data.frame(i=1:x-1))
+js <- copy_to(db, data.frame(j=1:y-1))
+
+grid <- is %>%
+  mutate(dummy = 1) %>%
+  inner_join(js %>% mutate(dummy = 1)) %>%
+  select(-dummy) %>%
+  mutate(uid=i + j * x)
+explain(grid)
+grid <- grid %>%
+  compute(name="grid", unique_indexes=list("uid"))
+grid
+```
+
+```{r}
+non_boundary <- grid %>% 
+  filter(i > 0 && i < x-1 && j > 0 && j < y-1)
+left <- non_boundary %>% mutate(a=i-1, b=j) %>% select(-i, -j)
+right <- non_boundary %>% mutate(a=i+1, b=j) %>%  select(-i, -j)
+top <- non_boundary %>%  mutate(a=i, b=j+1) %>% select(-i, -j)
+bottom <- non_boundary %>%  mutate(a=i, b=j-1) %>% select(-i, -j)
+stencil <- left %>% 
+  union_all(right) %>%
+  union_all(top) %>%
+  union_all(bottom)
+topo <- stencil %>%
+  left_join(grid, c("a"="i", "b"="j")) %>%
+  mutate(uid=uid.x, adj=uid.y) %>%
+  select(-a, -b, -i, -j, -uid.x, -uid.y)
+explain(topo)
+topo <- topo %>%
+  compute(name="topo", indexes=list("uid"))
+topo
+```
+
+```{r}
+add_random_heat <- non_boundary %>%
+  collect() %>%
+  sample_n(4) %>%
+  mutate(heat=1) %>%
+  select(-i, -j)
+current <- grid %>% 
+  mutate(heat=0) %>%
+  select(-i, -j) %>%
+  union_all(add_random_heat, copy=TRUE) %>%
+  group_by(uid) %>%
+  summarize(heat=sum(heat)) 
+explain(current) 
+current <- current %>%
+  compute(name="current")
+current %>% filter(heat > 0)
+```
+
+```{r}
+update_step <- function(current)
+{
+  neighbors <- topo %>%
+    inner_join(current, c("adj"="uid")) %>%
+    mutate(heat=heat*0.125, center=uid.x) %>%
+    select(-adj, -uid.x, -uid.y)
+  current %>% 
+    mutate(heat=heat*0.5, center=uid) %>%
+    select(-uid) %>%
+    union_all(neighbors) %>%
+    group_by(center) %>%
+    summarize(heat=sum(heat)) %>%
+    mutate(uid=center)
+}
+explain(update_step(current))
+update_step(current) %>% filter(heat > 0)
+```
+
+```{r}
+write_output <- function(t)
+{
+  dbGetQuery(db $ con,
+    paste("create table output_0_", t, 
+          " as select grid.i as i, grid.j as j, heat from current, grid where current.uid = grid.uid",
+          " and i > 0 and i <= ", x-2,
+          " and j > 0 and j <= ", y-2, sep=""))
+  tbl(db, paste("output_0_", t, sep="")) %>%
+    collect() %>%
+    ggplot() +
+    aes(x=i, y=j, fill=heat) +
+    geom_raster() +
+    ggsave(paste("images/output_0_", t, ".png", sep="")) +
+    scale_color_gradient()
+}
+```
+
+```{r}
+write_output(0)
+
+for (t in 1:100)
+{
+  nexts <- update_step(current) %>% compute(name="next")
+  sink <- dbGetQuery(db $ con, "drop table current")
+  sink <- dbGetQuery(db $ con, "alter table next rename to current")
+  current <- tbl(db, "current")
+  
+  if (t %% 100 == 0) write_output(t)
+}
+```

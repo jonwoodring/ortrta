@@ -1,0 +1,5 @@
+.*
+conda3/
+packer
+node_modules/
+R/

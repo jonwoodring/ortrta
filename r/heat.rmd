@@ -1,0 +1,391 @@
+---
+title: "heat"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# SQLite virtual tables in R #
+
+We require `dplyr` and `RSQLite` to be able to read our data set.
+
+`magrittr` is for the forward-pipe operator, `%>%`, similar to F#'s `|>`.
+
+`ggplot` provides a plotting tool that integrates really well with `dplyr`,
+as it provides "graphics transformers".
+
+This allows you to write programs that are chains in the combinator pattern:
+input data => transformers => graphics transformers => image
+
+```{r}
+library(RSQLite)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+```
+
+The first thing we need to do is setup `dplyr` to work with our virtual 
+table implementation over our scientific data set. 
+
+This requires some SQLite code to get things set up. In particular,
+`select load_extension` allows us to load our virtual table extension for
+our data format. These are the only lines of SQL that we'll need.
+
+In our equivalent Python version, `apsw` has a command `.loadextension`,
+but you can load extensions with `select load_extension` in SQL. This
+works for the `sqlite3` command line tool that comes with SQLite.
+
+```{r}
+db <- src_memdb()  # this is dplyr code for a new SQLite in memory database
+conn <- db $ con 
+# load virtual table extension for our data
+dbGetQuery(conn, "select load_extension('/home/lc17/sqlite/heat.so')")
+# load the data set
+dbGetQuery(conn, "create virtual table thrust using heat('/home/lc17/thrust/data')")
+# just to verify that it's working
+dbGetQuery(conn, "select count() from thrust where time = 3000")
+```
+
+Now, we can create a `dplyr` table on the data set from SQLite.
+
+```{r}
+thrust <- tbl(db, "thrust")
+thrust
+```
+
+Just so we have them, we can create tables for the other versions of the
+heat transfer simulation.
+
+```{r}
+dbGetQuery(conn, 
+  "create virtual table fortran using heat('/home/lc17/fortran/data')")
+dbGetQuery(conn, 
+  "create virtual table scala using heat('/home/lc17/scala/data')")
+dbGetQuery(conn, 
+  "create virtual table haskell using heat('/home/lc17/haskell/data')")
+fortran <- tbl(db, "fortran")
+scala <- tbl(db, "scala")
+haskell <- tbl(db, "haskell")
+```
+
+And now, we can start querying.
+
+In `dplyr`, you can think that a `tbl` is a set of named tuples, which are
+immutable. Every operation is lazily evaluated, such that data is not fetched
+to R until a "sink" is encountered, like displaying the data.
+
+What this is doing is building up a sequence of SQL commands, which are
+"views" or nested subqueries over the input data set. There's very little DSL 
+translation going on between dplyr and SQL -- i.e., there's no magic compiler,
+because there is such a small distance between SQL and traversable combinators.
+
+We will do a simple query over the Haskell version of the heat simulation,
+combining a `filter`, `select` (projection, tuple remapping), and `mutate` (map).
+
+For example, with `explain`, R shows us that the `dplyr` code translates into:
+```{r}
+explain(haskell %>% 
+          filter(heat > 0 && time == 0) %>% 
+          select(-i, -j) %>%
+          mutate(plusone=heat+1))
+```
+
+The first operation, `filter` is the inner most query, while the second
+operation, `select` wraps that query, and the last operation, and `mutate`
+wraps them all. `e
+
+Let's go on, and do some analysis on our Haskell version of the simulation.
+
+### Analysis of the Haskell version ###
+
+I'm going to plot the data around one of the initial "hot spots" over time.
+
+First, we'll get the initial points where the heat starts at one. `collect`
+copies the data from `SQLite` to `R` (in memory) as a data frame.
+
+```{r}
+points <- haskell %>%
+  filter(heat == 1 && time == 0) %>%
+  select(ci=i, cj=j) %>%
+  collect()
+points
+```
+
+We'll calculate bounds around the 2nd initial point within 10 units in the
+i, j dimensions.
+
+```{r}
+second <- points %>% filter(ci == 155)
+xleft <- second %>% select(ci) %>% collect() %>% .$ci - 10
+ybottom <- second %>% select(cj) %>% collect() %>% .$cj - 10
+xright <- xleft + 20
+ytop <- ybottom + 20
+```
+
+And show the result averaging all of the points that are around that center
+point.
+
+We `filter` the points if they are within the bounds, and then `group_by`
+time (`group_by` partitions points by attribute values). Then, we average
+the heat value for all of the points grouped by time -- applying a "window"
+function over the group.
+
+`group_by` can be though of as a sort by key, but then creates sub-sequences
+based on that key, which then a `map` operation can be applied. It's sort
+of the inverse of `flatMap` where `flatMap` goes from a list of lists to a
+list, [[a]] -> [a]. `group_by` goes from a list to a list of lists, 
+[a] -> [[a]].
+
+```{r}
+result <- haskell %>%
+  filter(xleft < i && i < xright) %>%
+  filter(ybottom < j && j < ytop) %>%
+  group_by(time) %>%
+  summarize(heat = avg(heat))
+result
+```
+
+With the data in hand, we can pipe it directly to the graphics transformers
+found in `ggplot`. Though, as we noted before, actually `result` is not 
+computed immediately. `result` is sitting there waiting to be executed, because 
+it is lazily evaluated. So, we have to `collect` it to R, so that `ggplot` is 
+able to transform the data to graphics. `ggplot` will sort x and y by x for us.
+
+One thing `dplyr` does not have, unlike Spark, is that it does not "implicitly"
+cache the results -- but `dplyr` can directly work with Spark via `sparklyr`.
+Thus, with a SQLite Virtual Table, you can query data directly, and then
+if you need to, load it directly in Spark, all through `dplyr`.
+
+```{r}
+result %>%
+  # move data to R
+  collect() %>%
+  # turn into graphics
+  ggplot() + 
+  # describe "aethetics", i.e., data to graphics mappings
+  aes(x=time, y=heat) +
+  # transform data into graphic primitives
+  geom_line()
+```
+
+Let's now do it for all of the initial points.
+
+This time, we'll create a query that is the initial points but with
+"bounding boxes"" around each initial point.
+
+```{r}
+boxes <- points %>%
+  mutate(cleft=ci-10, cright=ci+10, cbottom=cj-10, ctop=cj+10) %>%
+  select(-ci, -cj) %>%
+  mutate(id=row_number())
+boxes
+```
+
+With the bounding boxes, we will do a Cartesian product, aka cross join,
+between the bounds and each point, such that they are all annotated with
+the bounds that we care about. 
+
+To do an cross join in dplyr though, we have to cheat with an inner join
+/equijoin, by adding a constant value to each, and then joining on the 
+constant value.
+
+Then, we do the same as before, filter out the points if they are only within
+the boundaries of some distance to the initial heat points.
+
+### Thinking with data parallelism ###
+
+Up to this point, I haven't talked about "data parallelism". Data parallelism
+is SIMD, or "Single Instruction Multiple Data", or SPMD, "Single Program
+Multiple Data". One of the great things about the relational data model
+and the traversable model, is that if you restrict yourself to the primitives,
+the execution is automatically parallelizable. 
+
+Nowadays, people would call this the "map-reduce" paradigm. Spark is a great 
+example of this, and how to parallelize computations if you stick to the 
+primitives. GPU and graphics programming is another example of data parallel 
+programming. The relational data model is data parallel, too, if we avoid
+the mutables, i.e., INSERT, DELETE, and UPDATE.
+
+To begin "thinking with parallelism", this example illustrates how do we avoid 
+using nested loops and ifs, the bane of parallelism, and think in terms of 
+joins and filters.
+
+Think how you might implement the filtering in an imperative way:
+```
+for all points
+  for all center points
+    if within some distance to a center
+      retain point
+```
+
+If we do this in a psuedo-list comprehension: it might be 
+`[filter-center x | x <- xs]`, where `filter-center` is some closure over the 
+center points. But that `filter-center` might have a loop itself (traverse or 
+map), which is "nested parallelism" -- we will be avoiding any nested 
+parallelism, because it does not fit with the relational model or the flattened 
+data parallel model.
+
+Thus, we will be flattening all doubly nested for loops, and won't be creating
+closures. In our filter example, we annotated each tuple (row) with the tuple 
+that we want to compare to, the bounds around the center points through the
+Cartesian product, and filter on that one list. 
+
+That is, nested iteration, or doubly nested for loops are forbidden in a
+relational or data parallel model. In particular, a nested for-loop implies
+a closure (current name binding of values, i.e., current program executation 
+state or the state of the program stack) of the current state in the outer
+for loop. Creating closures are fine when we have single-threaded systems, but 
+not so in parallel systems due to the overhead of copying closures around.
+
+Though, I'm lying a little when I say we are avoiding doubly nested for loops,
+rather we are using join to implement them. In the end, a double iteration
+has to occur, but the value of the two lists is known at the time of the join.
+Whereas, if we did this with an inner iteration, that inner iteration might
+be dependent on some values on the outer iteration, creating closures, which
+are hard to parallelize. By using a join, we are removing any data dependencies 
+on the inner loop, because the only thing that a join takes is the two tables
+and the functor for evaluating the join.
+
+In particular, if you have programmed in Spark, think about the problems that
+you run into whenever you create a closure that isn't binding static values...
+This is that exact issue.
+
+```{r}
+boxes <- boxes %>% mutate(dummy=1)
+areas <- haskell %>%
+  # cross join aka Cartesian product
+  # we have to do a small hack, because dplyr doesn't
+  # support cross join currently
+  mutate(dummy=1) %>% 
+  inner_join(boxes, copy=TRUE) %>%  
+  select(-dummy) %>%
+  # filter out all points that are not in the bounds
+  filter(cleft <= i && i <= cright && cbottom <= j && j <= ctop) %>%
+  select(-cleft, -cright, -cbottom, -ctop) %>%
+  # group by both time and id
+  group_by(time, id) %>%
+  # average heat within bounds
+  summarize(heat = avg(heat))
+areas
+```
+
+And then plot. We pass the `id` column to `ggplot` to be able to plot multiple
+lines, and again we don't need to sort x or y by x because it does it for us.
+
+```{r}
+areas %>%
+  collect() %>%
+  ggplot() +
+  aes(x=time, y=heat, group=id, color=factor(id)) +
+  geom_line()
+```
+
+### Manually creating a histogram ###
+
+Next, we'll create a histogram of temperature values over the entire time
+seuqnce from scratch. While it is possible just to pass data to `ggplot`
+that you want to histogram, it's informative how to do it yourself, especially 
+in a relational or data parallel way.
+
+First, we'll create a table that has some data values that we need to be
+able to scale our data into histogram bins, i.e., a bias and scale.
+
+```{r}
+min_heat <- thrust %>%
+  filter(heat > 0) %>%
+  # figure out min heat > 0
+  summarize(bias=log10(min(heat))) %>%
+  # create values to be able to bin into 256
+  mutate(scale=255.0/(0 - bias)) %>%
+  select(bias, scale) %>%
+  # compute cache the result into a temporary table
+  # it's basically "force"
+  compute()
+min_heat
+```
+
+Again, we'll do the same trick as before, to do a "fake" cross join, to attach 
+our data to each row. First, we'll set all the zeros to the min value, because
+we want to do a log scale.
+
+```{r}
+min_heat <- min_heat %>% mutate(dummy=1)
+zeros <- thrust %>%
+  # only values = 0
+  filter(heat == 0.0) %>%
+  mutate(dummy=1) %>%
+  # if zero, set to min_heat
+  mutate(heat = bias, dummy=1) %>%
+  # attach our bias and scale
+  inner_join(min_heat) %>%
+  select(heat, bias, scale)
+zeros
+```
+
+Next, we'll do the same for all the rest of the values, attach the bias 
+and scale, but also union in the zeros. Then, we discrete everything using
+our bias and scale values. 
+
+Then, we actually do the histogram by counting the number of values in a bin.
+
+```{r}
+rest <- thrust %>%
+  # if > 0
+  filter(heat > 0.0) %>%
+  # convert to log scale
+  mutate(heat = log10(heat)) %>%
+  mutate(dummy=1) %>%
+  # attach our bias and scale
+  inner_join(min_heat) %>%
+  # add in the zeros
+  select(heat, bias, scale) %>%
+  union_all(zeros) %>%
+  # discretize them into bins
+  mutate(bin = round(scale * (heat - bias), 0)) %>%
+  # actually do the histogram
+  # group by bin
+  group_by(bin) %>%
+  # bin count
+  summarize(freq = n()) %>%
+  # scale the bin counts by log10
+  mutate(freq = log10(freq)) %>%
+  select(bin, freq)
+rest
+```
+
+Though, notice we have "missing" values, we can add in a bunch of zeros. I'm
+going to "cheat" a little here and create a data frame with the zeros and copy
+that over the SQLite.
+
+```{r}
+empty <- copy_to(db, data.frame(bin=0:256, freq=0.0), "empty")
+empty
+```
+
+Then, we take the union of these zeros with the rest of the data and then
+sum the 0s with the other bin values.
+
+Finally, we plot.
+
+```{r}
+# union the zeros with our calculated data
+empty %>%
+  union(rest) %>%
+  # sum up the bins with the zeros
+  group_by(bin) %>%
+  summarize(freq=sum(freq)) %>%
+  # send to R
+  collect() %>%
+  ggplot() +
+  # create column/bar plot by bin and frequency
+  aes(x=bin, y=freq) +
+  geom_col(width=1) +
+  # add our labels
+  xlab("log10(heat)") +
+  ylab("log10(frequency)") +
+  # and adjust the axis labels
+  scale_x_discrete(limits=c(0, 128, 255), labels=c(floor(bias), floor(bias*.5), 0))
+```
+
