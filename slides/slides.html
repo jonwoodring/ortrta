@@ -1275,16 +1275,17 @@ Consider the points around 4 as relationships
 ```python
 for i in indices:
   if i <= len(a):
-    print(a[i])
+    print(i, a[i])
 for i in indices:
   if i in b:
-    print(b[i])
-for i, j in product(indices, c): # product is Cartesian product
+    print(i, b[i])
+for i, j in product(indices, c): 
   if i == j[0]:                  
-    print(j[1])
+    print(i, j[1])
 ```
 
-Each of these is a *join*, the first two are *left join*s
+Each of these is a *join*, where the first two are using knowledge
+of the index distribution 
 
 Recall way back when when I said *join* is a fancy Cartesian product? This
 is what I meant
@@ -1423,7 +1424,7 @@ As a scientist, why learn data parallelism and not just MPI and OpenMP?
 <section data-markdown><textarea data-template>
 ### Performance Gap ###
 
-There is a reason that no one in scientific and supercomputing uses Spark: 
+There is one reason Spark is rare in scientific and supercomputing: 
 *performance*
 
 - (and supercomputers don't run Java)
