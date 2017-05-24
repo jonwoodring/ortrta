@@ -9,6 +9,13 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Heat in dplyr #
+
+The program is pretty much the same as the Spark version, and this is just
+a stunt to show how similar the programming is.
+
+Also, to show you how the dplyr (Spark) compiles into SQL commands.
+
 ```{r}
 library(dplyr)
 library(RSQLite)
@@ -28,6 +35,13 @@ dbGetQuery(db $ con, "pragma synchronize=off")
 dbGetQuery(db $ con, "pragma threads=4")
 ```
 
+## grid ##
+
+We create our is and js such that we have a list of `uid` to i, j positions.
+
+One difference between Spark is that we have different types of joins, like
+`inner_join`. 
+
 ```{r}
 x <- 202
 y <- 202
@@ -45,6 +59,17 @@ grid <- grid %>%
   compute(name="grid", unique_indexes=list("uid"))
 grid
 ```
+
+## topology and stencil ##
+
+For the `stencil`, we individually create each direction, somewhat similar
+to how we did it in Thrust, but instead of zipping the columns together,
+we union them into one table, creating the topology, `topo`.
+
+It would be possible to zip them together, like Thrust, but that creates
+a problem if you want to create topologies that aren't always 4-way. By
+creating a list, i.e., (uid, adjacent) keyed by uid, we can have arbitrary
+topologies, like points, triangles, tetrahedra, etc.
 
 ```{r}
 non_boundary <- grid %>% 
@@ -67,6 +92,14 @@ topo <- topo %>%
 topo
 ```
 
+## initialization ##
+
+`dplyr` is nice in that it gives us a sampling function, `sample_n`, allowing
+us to sampling from the non boundary grid points. We use the sample to
+mutate them with the initial heat to union them back into the heat table,
+`current`, and reduce the temperatures by key, i.e., `group_by` and 
+`summarize`.
+
 ```{r}
 add_random_heat <- non_boundary %>%
   collect() %>%
@@ -84,6 +117,10 @@ current <- current %>%
   compute(name="current")
 current %>% filter(heat > 0)
 ```
+
+## update_step ##
+
+The `update_step` is the same as Spark.
 
 ```{r}
 update_step <- function(current)
@@ -104,6 +141,12 @@ explain(update_step(current))
 update_step(current) %>% filter(heat > 0)
 ```
 
+## write_output ##
+
+We can directly write the output back into a table by using some SQL
+to select the existing table into a new table. We can directly plot the
+data since we are in R.
+
 ```{r}
 write_output <- function(t)
 {
@@ -121,6 +164,12 @@ write_output <- function(t)
     scale_color_gradient()
 }
 ```
+
+## heat program ##
+
+What's different here from Spark is that we use double-buffering to flip
+between tables. This is because name bindings are global, and we need
+to drop the old table names and rename to the existing table name.
 
 ```{r}
 write_output(0)

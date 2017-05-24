@@ -316,10 +316,10 @@ zeros <- thrust %>%
   # only values = 0
   filter(heat == 0.0) %>%
   mutate(dummy=1) %>%
-  # if zero, set to min_heat
-  mutate(heat = bias, dummy=1) %>%
   # attach our bias and scale
   inner_join(min_heat) %>%
+  # if zero, set to min_heat
+  mutate(heat = bias, dummy=1) %>%
   select(heat, bias, scale)
 zeros
 ```
@@ -371,6 +371,7 @@ Finally, we plot.
 
 ```{r}
 # union the zeros with our calculated data
+bias <- collect(min_heat) %>% .[[1]]
 empty %>%
   union(rest) %>%
   # sum up the bins with the zeros
@@ -386,6 +387,7 @@ empty %>%
   xlab("log10(heat)") +
   ylab("log10(frequency)") +
   # and adjust the axis labels
-  scale_x_discrete(limits=c(0, 128, 255), labels=c(floor(bias), floor(bias*.5), 0))
+  scale_x_discrete(limits=c(0, 128, 255), 
+                   labels=c(floor(bias), floor(bias*.5), 0))
 ```
 
