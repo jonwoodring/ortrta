@@ -13,9 +13,11 @@
 ## A Scientist's Guide to the Relational Data Model ##
 ### or (One Reader to Rule Them All) ###
 
-[Jon Woodring](https://github.com/jonwoodring)
+[Jon Woodring](https://github.com/jonwoodring), Ph.D.
 
-<small>*Los Alamos National Laboratory*</small>
+<a href="https://www.lanl.gov">
+  <small>*Los Alamos National Laboratory*</small>
+</a>
 
 LambdaConf 2017
 
@@ -37,7 +39,7 @@ Content for both scientists and functional programming enthusiasts
 
 - Data analysis in scientific computing
 - SQLite to the rescue
-- Parallel computing
+- SQL as it relates to parallel computing
 - Why stop at just analysis?
 - Where to go from here...
 
@@ -50,11 +52,11 @@ Content for both scientists and functional programming enthusiasts
 
 <img src="local/triforce.png" width=300>
 
-I am going to weave a story of how "relational data model",
-"functional programming", and "data parallelism" are all intertwined.
+In particular, I am interested in how the *relational data model* and
+*functional programming* is intertwined with *data parallelism*.
 
 To ruin the punchline, it's not *Spark* -- whatever it is
-doesn't exist, yet, except in pieces.
+doesn't exist, yet, except in fragments 
 
 </textarea></section>
 <!-- END SLIDE -->
@@ -69,10 +71,9 @@ doesn't exist, yet, except in pieces.
 <section data-markdown><textarea data-template>
 ### Scientific Computing ###
 
-Numerical models & computer simulations for things like physics --
-also, data processing for
+Numerical models, computer simulations, and data processing for
 real-world experiments, like [telescopes](http://www.sdss.org) and 
-[accelerators](https://home.cern/topics/large-hadron-collider)
+[particle physics](https://home.cern/topics/large-hadron-collider)
 
 <a href="https://mpas-dev.github.io">
 <img src="local/oceanImage.png" width=325>
@@ -112,12 +113,12 @@ Some Department of Energy (DOE) supercomputers:
 ### Large-scale Simulations mean Large-Scale Data ###
 
 - With [MPAS-O](https://mpas-dev.github.io/), an ocean climate simulation
-  - they run on the order of hundreds of simulated years for
+  - They run on the order of hundreds of simulated years for
     climate studies, resulting in tens to hundreds terabytes (TB) of data
     for one run
 - With [HACC](https://www.olcf.ornl.gov/2013/11/05/code-for-largest-cosmological-simulations-ever-on-gpus-is-gordon-bell-finalist/), 
     a dark matter cosmology simulation
-  - from the beginning of the simulated universe, a "heroic" run
+  - From the beginning of the simulated universe, a "heroic" run
     would take several petabytes (1 PB = 1,000,000 GB) 
 - Parameter sweep - runs over multiple ranges of inputs,
   multiply these numbers by X
@@ -205,7 +206,7 @@ $ jupyter notebook jupyter/heat.ipynb
 <section data-markdown><textarea data-template>
 ### Querying (apply-filter-combine) ###
 
-*But that was simple:* What if we want to query the data? In particular, 
+*But, that was simple:* What if we want to query the data? In particular, 
 do a plot of the maximum temperature over time?
 
 - Read each time step
@@ -213,7 +214,7 @@ do a plot of the maximum temperature over time?
 - Sort the data by time
 - Plot
 
-This is potentially a lot of Python code.
+This is potentially a lot of Python code
 </textarea></section>
 
 <!-- START SLIDE -->
@@ -261,7 +262,7 @@ the Fortran data set:
   - no ingest, the data sits at rest (**no copy!**)
   - same function as data frames, but better
 - readable in anything that understands SQLite
-  - streaming, out-of-core
+  - streaming, incremental
   - caveat, it does require *extension loading* (or compiling your virtual
     table into SQLite)
 
@@ -293,21 +294,18 @@ the Fortran data set:
 
 SQL, i.e., 
 [relational algebra](https://en.wikipedia.org/wiki/Relational_algebra)\*
-semantics, largely overlap with *traversable (iterable) combinators* 
+semantics, largely overlap with *traversable (iterable) pattern* 
 
-- `select` *map and reduce functors\**
+- `select` *map and reduce functions*
 - `from` *traversable of tuples*
-- `where` **filter functors**
-- `group by` *key functor*
-- `order by` *key functor*
+- `where` *filter functions*
+- `group by` *key functions*
+- `order by` *key functions*
 
 <small>
 \*aside from dispute between relational algebra formalism and SQL
 as practiced, as it does not strictly adhere to the formalism -- but
 that's true of any engineered system
-
-\*and by functor, I mean a function that is passed to another function,
-not the functor typeclass in Haskell
 </small>
 
 </textarea></section>
@@ -362,7 +360,7 @@ $ rstudio-bin r/heat.rmd
 Works with both *SQL* databases **and** *Spark*
 
 - Loading data via *dplyr*
-- Querying using combinators
+- Querying using chaining
 - Plotting time series data
   - tables => transformers => 
     graphics transformers via *ggplot* => image
@@ -528,21 +526,21 @@ you'd like to implement it.
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
-### Portable Reader ###
+### Virtual Tables - Portable Readers ###
 
 - Streaming, no ingest, no copying
 - Not tied to a particular tool via extension loading
+- Concise programs using traversable patterns
 - Drawbacks
   - Magic compiler, aka the query optimizer, doesn't always do the best
     (optimization hints [here](https://sqlite.org/queryplanner-ng.html))
   - SQL and SQLite is an interpreter
   - No distribution (sharding) for REALLY large data 
-    - Optionally, run SQLite interpreters in parallel to shard queries and 
-      gather results (except joins)
+  - Learning relational programming? What if I told you it is 
+    parallel computing?
 
 </textarea></section>
 <!-- END SLIDE -->
-
 
 <!-- *** END VERTICAL *** -->
 </section>
@@ -553,7 +551,7 @@ you'd like to implement it.
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
-### Switching Gears: Data Parallelism ###
+### Data Parallelism ###
 
 Data parallelism is applying the same program to all data elements: 
 Single Instruction Multiple Data (SIMD) or Single Program Multiple Data (SPMD)
@@ -575,8 +573,8 @@ Single Instruction Multiple Data (SIMD) or Single Program Multiple Data (SPMD)
   - *No* array indexing, *no* explicit for loops
   - map, reduce, filter, concat (flatten), etc.
 - Avoid "nested parallelism" or "double for loops"
-  - No lists in lists or the "closure problem"
-  - An inner scope dependent on an outer scope can't be easily parallelized
+  - No lists in lists or the "closure problem", i.e., an inner scope 
+    dependent on an outer scope can't be easily parallelized
 - Use immutable data (read-only to write-target)
   - Reduce data dependencies by "double-buffering"
   - Mutation-in-place creates serial dependencies
@@ -604,7 +602,7 @@ Single Instruction Multiple Data (SIMD) or Single Program Multiple Data (SPMD)
 ### It's not new (Non-exhaustive list) ###
 
 - Early pioneers in vector data parallelism
-  - Guy Belloch and [NESL](https://www.cs.cmu.edu/~scandal/nesl.html),
+  - Guy Blelloch and [NESL](https://www.cs.cmu.edu/~scandal/nesl.html),
     a data parallel language
   - [Connection Machine](https://en.wikipedia.org/wiki/Connection_Machine) 
 - [Data Parallel Haskell](https://wiki.haskell.org/GHC/Data_Parallel_Haskell)
@@ -622,7 +620,6 @@ Single Instruction Multiple Data (SIMD) or Single Program Multiple Data (SPMD)
 </textarea></section>
 <!-- END SLIDE -->
 
-
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
 ### Nested parallelism in Relational Land ###
@@ -635,8 +632,8 @@ Relational programming has flattening transforms
   - With various configurations of how to iterate over the two lists:
     inner, outer, left, right, etc.
 - *Group by* aka *partition by* aka *sort*
-  - Segments a list into lists, applies a functor to each sub list,
-    and then flatmaps the result
+  - Segments a list into lists, applies a function to each sub list,
+    and flattens the result
   - `concat (map f (groupBy g xs))`
 
 </textarea></section>
@@ -675,7 +672,6 @@ Relational programming has flattening transforms
 </textarea></section>
 <!-- END SLIDE -->
 
-
 <!-- *** END VERTICAL *** -->
 </section>
 
@@ -690,10 +686,11 @@ Relational programming has flattening transforms
 One of the things that I find strange is that scientific simulations
 are a data parallel problem, too, but
 
-- Simulations get written in 
+- Simulations only get written in 
   - Fortran, C/C++, Matlab, Python (numpy), Julia, etc.
   - Imperative array based languages
     - Doing things in parallel is hard
+  - Though, I understand a lot of it is leg
 - If simulations are data parallel problems (which they are), then...
 </textarea></section>
 <!-- END SLIDE -->
@@ -704,8 +701,8 @@ are a data parallel problem, too, but
 
 <img src="local/crazy.png" width=250>
 
-Why not use a relational/functional/data parallel programming
-style for the simulation, too?
+Why not try to use a relational/functional/data parallel programming
+style for the simulation, too? 
 
 For the Fortran simulation, I have implementations in:
 
@@ -735,7 +732,7 @@ condition) and how it dissipates over time
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
-### Stencil on a 2D grid###
+### Stencil on a 2D grid ###
 
 <img src="local/stencil.png" width=600>
 
@@ -925,7 +922,6 @@ using a double-buffering pattern to get immutability.
   - Data parallelism removes data dependencies allowing threads to work 
     independently (SIMD)
 - We can do this because the data is immutable 
-  - No mutation in place 
   - Independent threads do not have to coordinate
 </textarea></section>
 <!-- END SLIDE -->
@@ -1174,14 +1170,13 @@ Let's take the example of our simple 3x3 grid with point 4 in the center.
 Consider the points around 4 as relationships
 
 - We express this as pairs, *(adjacent, id)*:
-  - (1, 4), (3, 4), (5, 4), and (7, 4)
+  - *(1, 4)*, *(3, 4)*, *(5, 4)*, and *(7, 4)*
 - Let's make up some temperatures
-  - 4 = 1.0, 1 = .2, 3 = 0, 5 = .4, and 7 = .5
+  - *4 = 1.0*, *1 = .2*, *3 = 0*, *5 = .4*, and *7 = .5*
 - Given the example temperatures, lets express them as pairs, 
   *(id, temperature)*
-  - (1, .2), (3, 0), (4, 1), (5, .4) and (7, .5)
-- Given these key-value pairs, both the points adjacent to 4 and their 
-  temperatures, how do we calculate the stencil on point 4?
+  - *(1, .2)*, *(3, 0)*, *(4, 1)*, *(5, .4)*, and *(7, .5)*
+- How do we calculate the stencil on point 4?
 
 </textarea></section>
 <!-- END SLIDE -->
@@ -1193,7 +1188,7 @@ Consider the points around 4 as relationships
 <img src="local/join.png" width=800>
 
 - Consider point 4, it is adjacent to 1, 3, 5, and 7
-- These pairs can recorded in a *topology* list
+- These pairs can be recorded in a *topology* list
 
 </textarea></section>
 <!-- END SLIDE -->
@@ -1220,7 +1215,7 @@ Consider the points around 4 as relationships
   a *join* on *adjacent* and *id* between *topology* and *current*
   - This produces pairs of *(adjacent, (id, temperature))*
 - We *map* the pairs from the join to *(id, temperature)* producing a 
-  *stencil* list of *(id, temperature)*
+  *stencil* list 
 
 </textarea></section>
 <!-- END SLIDE -->
@@ -1232,7 +1227,7 @@ Consider the points around 4 as relationships
 <img src="local/join.png" width=800>
 
 - If we scale the *current* table by 0.5 and the *stencil* table by 0.125,
-  we effectively multiply the temperature by the stencil weights
+  we effectively multiply the temperatures by the weights
 - Taking the union of these two tables, we get the temperatures keyed 
   by *id* that make up the stencil
 
@@ -1297,14 +1292,14 @@ is what I meant
 ### Join, Map, and Reduce as a Stencil ###
 
 - Arrays are *map*s (dictionary) of integers to value
-- Stencils are joins of integer lists on maps of integers to values,
+- Joins of integer lists on maps of integers to values,
   resulting in value lookup
   - With a map and reduce to complete the operation
 - Why is this important?
   - We can express the stencil as a join
   - Spark is distributed data parallelism 
     - Up until now, we have only been talking about shared memory parallelism,
-      this shows how we can bridge the gap and scale up
+      this shows how we can bridge the gap and scale out
 </textarea></section>
 <!-- END SLIDE -->
 
@@ -1390,9 +1385,8 @@ This is the crazy bit. I have implemented the heat equation in *dplyr*
 which is running on *SQLite*... which means, we are executing a heat
 equation in SQL.
 
-I've done it before, but not in this version, such that it is possible
-to write it natively in SQL, because SQLite is Turing complete via recursive
-queries.
+It is possible to write it natively in SQL, without R,
+because SQLite is Turing complete via recursive queries.
 
 </textarea></section>
 <!-- END SLIDE -->
@@ -1412,11 +1406,11 @@ As a scientist, why learn data parallelism and not just MPI and OpenMP?
 - Data parallelism is a key to
   - Programming GPUs and multicore processors
   - Portable parallelism
-  - Data analysis
-- MPI (Message Passing Interface) is the defacto standard for distributed
+  - Data analysis: SQL and SQLite
+- Though,
+  MPI (Message Passing Interface) is the defacto standard for distributed
   parallel computing in scientific and supercomputing
   - Requires a lot of bookkeeping, easy to screw up
-  - But, highly performant
 </textarea></section>
 <!-- END SLIDE -->
 
@@ -1440,16 +1434,16 @@ There is one reason Spark is rare in scientific and supercomputing:
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
-### Am I stupid? ###
+### Am I dumb? ###
 
 I'm sure someone will tell me how I went about the wrong way implementing
   it in Spark, 
 
 - Or the scale of the problem was too small, or
-- Wrong tool for the wrong job - I don't disagree
+- Wrong tool for the wrong job - *I don't disagree*
   - But, numbers like these are the reason that
     supercomputing doesn't use this technology
-- Secondly, I'm interested in a relational-data parallel-functional 
+- Secondly, I'm interested in a *relational-data parallel-functional*
   cross-over, which is why I implemented it the way that I did in Spark
   - No need to explore more array languages, it's more Fortran: 
     see Dask, Julia, etc.
@@ -1458,7 +1452,7 @@ I'm sure someone will tell me how I went about the wrong way implementing
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
-### Next-Gen Spark? ###
+### Need for a Next-Gen Spark ###
 
 - Papers published on 
   ["Spark for supercomputing"](https://github.com/SciPioneer/Smart)
@@ -1476,6 +1470,23 @@ I'm sure someone will tell me how I went about the wrong way implementing
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
+### Finally ###
+
+- Not actually suggesting writing simulations in SQL
+  - Decades of code in BLAS, LINPACK, etc.
+- But, there are ideas worth revisiting
+  - Vector data parallelism is decades old
+  - SQL and relational data is more decades old
+- This talk was an outcome of my desire to see a faster Spark that
+  combines the best of all aspects, including scientific supercomputing
+- Raising the question of where we might go about making parallel computing
+  better, usable, and more performant for everyone
+
+</textarea></section>
+<!-- END SLIDE -->
+
+<!-- START SLIDE -->
+<section data-markdown><textarea data-template>
 ### Thanks for listening! ###
 
 For more talks like mine on Supercomputing, see another Jonathan,
@@ -1486,6 +1497,7 @@ For more talks like mine on Supercomputing, see another Jonathan,
 <img src="local/sqlite_ring.png" width=300>
 </textarea></section>
 <!-- END SLIDE -->
+
 
 <!-- *** END VERTICAL *** -->
 </section>
