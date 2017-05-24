@@ -41,7 +41,7 @@ running Arch Linux.
   - Jupyter notebook
 - `fortran`
   - gfortran
-  - OpenMPI
+  - MPI (such as OpenMPI or mvapich)
 - `haskell`
   - [stack](https://docs.haskellstack.org/en/stable/README/)
 - `scala`
