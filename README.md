@@ -25,19 +25,27 @@ To run the examples, at a minimum you will need for each:
 
 - `r` and `dplyr` directories
   - R
+    - dplyr
+    - magrittr
+    - ggplot2
+    - RSQLite compiled with devtools (needs latest SQLite)
   - R-Studio Desktop
 - `jupyter`
   - Python 3
+    - [apsw](https://github.com/rogerbinns/apsw)
+    - numpy
+    - Bokeh
   - Jupyter notebook
 - `fortran` directories
   - gfortran
   - OpenMPI
 - `haskell` directories
-  - [stack]()
+  - [stack](https://docs.haskellstack.org/en/stable/README/)
 - `scala`
   - sbt
 - `sqlite`
   - gcc or clang
 - `thrust`
   - g++ or clang++
-
+  - Cuda
+  - OpenMP
