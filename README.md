@@ -21,9 +21,12 @@ To run the examples, at a minimum you will need for each:
 - node.js
 - [codedown](https://www.npmjs.com/package/codedown)
 
+The [virtual machine image]() already has the requirements pre-installed 
+running Arch Linux.
+
 #### Per Language Requirements ####
 
-- `r` and `dplyr` directories
+- `r` and `dplyr`
   - R
     - dplyr
     - magrittr
@@ -36,10 +39,10 @@ To run the examples, at a minimum you will need for each:
     - numpy
     - Bokeh
   - Jupyter notebook
-- `fortran` directories
+- `fortran`
   - gfortran
   - OpenMPI
-- `haskell` directories
+- `haskell`
   - [stack](https://docs.haskellstack.org/en/stable/README/)
 - `scala`
   - sbt
