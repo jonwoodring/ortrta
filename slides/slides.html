@@ -424,7 +424,7 @@ Confusing?
 - Create a list of named tuples: *table*
 - Bind list to name, i.e., iterator: *cursor*
 - Maps (associative arrays aka dictionaries) from values to tuples: *index*
-- Create a filter functor: *query*
+- Create a filter function: *query*
 - Apply filter to list: *next*
 - Extract values from tuple: *column*
 - Nil (end of list): *end*
@@ -620,25 +620,6 @@ Single Instruction Multiple Data (SIMD) or Single Program Multiple Data (SPMD)
 </textarea></section>
 <!-- END SLIDE -->
 
-<!-- START SLIDE -->
-<section data-markdown><textarea data-template>
-### Nested parallelism in Relational Land ###
-
-Relational programming has flattening transforms
-
-- *Join* is a fancy Cartesian product with a filter 
-  - It takes two lists and returns a list
-  - `[filter f (x, y) | x <- xs, y <- ys]`
-  - With various configurations of how to iterate over the two lists:
-    inner, outer, left, right, etc.
-- *Group by* aka *partition by* aka *sort*
-  - Segments a list into lists, applies a function to each sub list,
-    and flattens the result
-  - `concat (map f (groupBy g xs))`
-
-</textarea></section>
-<!-- END SLIDE -->
-
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
@@ -690,7 +671,7 @@ are a data parallel problem, too, but
   - Fortran, C/C++, Matlab, Python (numpy), Julia, etc.
   - Imperative array based languages
     - Doing things in parallel is hard
-  - Though, I understand a lot of it is leg
+  - Though, I understand a lot of it is legacy 
 - If simulations are data parallel problems (which they are), then...
 </textarea></section>
 <!-- END SLIDE -->
@@ -1062,7 +1043,7 @@ Turn an N-D array into a 1D array
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
-### Flattening in Practice - Thrust ###
+### Flattening in Practice ###
 
 In Thrust, our only choice is 1D iterators
 
@@ -1140,9 +1121,73 @@ We can do N-D arrays through fancy 1D indexing
 
 <!-- START SLIDE -->
 <section data-markdown><textarea data-template>
+### Nested parallelism in Relational Land ###
+
+Relational programming has flattening transforms
+
+- *Join* is a fancy Cartesian product with a filter 
+  - It takes two lists and returns a list
+  - `[filter f (x, y) | x <- xs, y <- ys]`
+  - With various configurations of how to iterate over the two lists:
+    inner, outer, left, right, etc.
+- *Group by* aka *partition by* aka *sort*
+  - Segments a list into lists, applies a function to each sub list,
+    and flattens the result
+  - `concat (map f (groupBy g xs))`
+
+</textarea></section>
+<!-- END SLIDE -->
+
+<!-- START SLIDE -->
+<section data-markdown><textarea data-template>
+### Join by analogy ###
+
+Say we are designing a game, and our artists create some monsters
+
+<img src="local/monsters.png" width=800>
+
+</textarea></section>
+<!-- END SLIDE -->
+
+<!-- START SLIDE -->
+<section data-markdown><textarea data-template>
+### More components ###
+
+And, then our level designers create some environments 
+
+<img src="local/environs.png" width=800>
+
+</textarea></section>
+<!-- END SLIDE -->
+
+<!-- START SLIDE -->
+<section data-markdown><textarea data-template>
+### Combine them together ###
+
+What we could do is put all monsters in all environments
+
+<img src="local/cartesian.png" width=800>
+
+</textarea></section>
+<!-- END SLIDE -->
+
+<!-- START SLIDE -->
+<section data-markdown><textarea data-template>
+### Filter the unwanted ###
+
+But, some combinations may not be wanted,
+so we can filter out the ones we don't want
+
+<img src="local/filter.png" width=800>
+
+</textarea></section>
+<!-- END SLIDE -->
+
+<!-- START SLIDE -->
+<section data-markdown><textarea data-template>
 ### Heat Equation in Spark ###
 
-I'm just going to throw this out there
+Using join to do the computation
 
 ```scala
 next = topology
@@ -1280,10 +1325,9 @@ for i, j in product(indices, c):
 ```
 
 Each of these is a *join*, where the first two are using knowledge
-of the index distribution 
-
-Recall way back when when I said *join* is a fancy Cartesian product? This
-is what I meant
+of the index distribution. We are iterating over both lists,
+and returning a list of things that we want to keep, based on
+properties between both lists. 
 
 </textarea></section>
 <!-- END SLIDE -->
@@ -1421,7 +1465,7 @@ As a scientist, why learn data parallelism and not just MPI and OpenMP?
 There is one reason Spark is rare in scientific and supercomputing: 
 *performance*
 
-- (and supercomputers don't run Java)
+- *(and supercomputers don't run Java)*
 - 10,000 iterations of the heat equation, 4 processors, 200x200 grid
   - Fortran + MPI: **3 seconds**
   - Thrust multicore CPU: 4.5 seconds
