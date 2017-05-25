@@ -5,7 +5,7 @@ Jon Woodring, LambdaConf 2017 talk
 
 [Slides](https://cdn.rawgit.com/jonwoodring/ortrta/slides/slides/slides.html)
 
-[Virtual Machine]()
+[Virtual Machine](https://goo.gl/GvU7o0)
 
 ### Requirements ###
 
@@ -21,8 +21,8 @@ To run the examples, at a minimum you will need for each:
 - node.js
 - [codedown](https://www.npmjs.com/package/codedown)
 
-The [virtual machine image]() already has the requirements pre-installed 
-running Arch Linux.
+The [virtual machine image](https://goo.gl/GvU7o0) already has the 
+requirements pre-installed running Arch Linux.
 
 #### Per Language Requirements ####
 
