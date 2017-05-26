@@ -366,7 +366,16 @@ It is a very simple map of id => temperature, by computing:
 
 ### add_random_heat ###
 
-TODO
+This time around to create the initial conditions, we are able to use
+the `takeSample` function from our topology after `filter`ing by the
+boundary condition. We are then left with 4 initial points of heat
+across our domain, and use a `map` function to set their initial temperature
+to 1.0.
+
+To add this back into the list of temperatures for all of the grid points,
+we use `union` with the existing temperatures, which are all initialized to 0.
+Then using `reduceByKey` with sum, we add the random points back into the
+initial condition. 
 
 ```scala
   val add_random_heat = grid
@@ -394,6 +403,53 @@ that big of a deal.
 
 ## heat program ##
 
+Here is the magic of the main loop that applies the stencil function
+via `join`, `map`, and `reduce`.
+
+1. `join` the topology with the temperature -- This results in having a
+   table of all the adjacent values temperatures keyed by the center
+   point id
+2. `map` over (1), multiplying each of the adjacent temperatures by .125  
+3. `map` over the original temperatures, multiplying each of them by .5
+4. `union` (2) and (3), which results in a table of temperatures keyed
+   by the center point id -- We now have all of the necessary new temperature
+   values per point to update them
+5. complete (4) by `reduceByKey` with sum, which results in a new temperature
+   which is assigned back to `temp`
+
+Since Spark is distributed, this will automatically scale out to the
+number of workers (processors).
+
+### join vs. ghost cells ###
+
+The one big difference between Fortran and Spark is that in Spark we don't
+have to worry about spatial domain decomposition and ghost cells, as
+Spark will correctly index all data needed during a join. But, this is
+the (likely) biggest performance gain in communication in pre-distribute
+of data to the processors that need it and only do a "local" join.
+
+This is where I would like to integrate lessons learned in MPI vs. joins
+is providing join operations that allow for particular execution patterns
+based on data partitioning and indexing. By relying on an abstract operation
+(the shuffle), it becomes really hard to optimize and I personally do
+not trust "magic" compilers for parallel code. Possibly someday we will
+get there in terms of compiler technology to automatically optimize
+distributed computation, but that does not exist as of now.
+
+#### partitioning and sinking ####
+
+In this particular case, I do repartition every so often with our
+partitioning function `p`, in both `join` and `reduceByKey`. This
+minimizes how many partitions are created after each shuffle. 
+This partitioning function tries to replicate how the partitioning
+occurs in Fortran. I have noticed a speed difference between partitioning
+and not-partitioning (using the default random partitioner).
+
+Also, Spark needs to "sink" every so often, or it may be the case that
+you will run out of memory. The DAG, in my experience, will too grow big for it 
+to figure out how to evaluate it, since we have such a large iterative loop
+around the lazy computation. 
+
 ```scala
   var t = 1
   while (t <= 10000)
@@ -413,7 +469,17 @@ that big of a deal.
 }
 ```
 
-### miscellany ###
+## miscellany ##
+
+### write_output ###
+
+Instead of using Spark's default write text file functionality, we do
+a collect to the master process to transform and write the data to a
+single text file.
+
+This is primarily to replicate the existing Fortran file format because
+I didn't want to write a second SQLite virtual table for the Spark 
+text file format (a number of files per process in separate directories).
 
 ```scala
 def write_output(grid: RDD[(Long, (Double, (Long, Long)))], t: Integer)
@@ -427,10 +493,24 @@ def write_output(grid: RDD[(Long, (Double, (Long, Long)))], t: Integer)
     new java.io.File("data/output.0.%d".format(t)))
   try { output.foreach(p.println) } finally { p.close() }
 }
+```
 
+### not_boundary ###
+
+This is our boundary checking condition to filter out points that are on
+the boundary condition.
+
+```scala
 def not_boundary(i:Long, j:Long): Boolean = 
   i > 0 && i < x - 1 & j > 0 && j < y - 1 
+```
 
+### adjacent ###
+
+`adjacent` is used during the topology construction to construct the
+list of points adjacent to each point, as long as it is not a boundary point.
+
+```scala
 def adjacent(el: (Long, (Long, Long))): Array[((Long, Long), Long)] =
 {
   el match {
@@ -445,7 +525,23 @@ def adjacent(el: (Long, (Long, Long))): Array[((Long, Long), Long)] =
     }
   }
 }
+```
 
+### DomainPartitioner ###
+
+The domain partitioner replicates the partitioning found in the Fortran
+version by building the partition number given the position in the grid
+and the size of the grid. As mentioned previously, we don't have ghost
+cells and Spark doesn't have the concept of ghost cells.
+
+The closest thing that we could have used for ghost cells is shared data
+between all processes/partitions, but this would be incredibly inefficient
+for large grids with many processes. Secondly, in the Fortran + MPI code
+data is only replicated to processors that it need it, rather than replicating
+the data everywhere. Thus, a "join" in Fortran is more like a "localized join",
+and does not do an all-to-all communication like a Spark join might do.
+
+```scala
 class DomainPartitioner (x: Long, y: Long)
   extends Partitioner 
 {
