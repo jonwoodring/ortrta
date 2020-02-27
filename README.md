@@ -13,8 +13,8 @@ thing you ought to do is `git pull origin master` after logging in.
 
 ### Analysis of Data via Virtual Tables
 
-1. [SQLite](https://github.com/jonwoodring/ortrta/blob/master/sqlite/heat.md)
-2. [Python](https://github.com/jonwoodring/ortrta/blob/master/jupyter/heat.ipynb)
+1. [Python](https://github.com/jonwoodring/ortrta/blob/master/jupyter/heat.ipynb)
+2. [SQLite](https://github.com/jonwoodring/ortrta/blob/master/sqlite/heat.md)
 3. [R](https://github.com/jonwoodring/ortrta/blob/master/r/heat.rmd)
 
 ### Simple 2D Heat Equation
